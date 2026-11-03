@@ -162,3 +162,15 @@ test('updater：onEvent 收到状态广播；status() 返回快照', async funct
   assert.equal(events[0].lastResult.status, 'up-to-date');
   assert.ok(events[0].lastCheckedAt);
 });
+
+test('updater：本地已领先远端（merge 空操作）时按已最新处理', async function () {
+  const run = fakeRun(Object.assign({}, BASE_RESPONSES, {
+    'rev-parse HEAD': { stdout: '3333333\n' },
+    'rev-parse --verify origin/main': { stdout: '2222222\n' },
+    'merge --ff-only origin/main': { stdout: 'Already up to date.\n' }
+  }));
+  const updater = createUpdater({ appDir: appDirWithGit(), run: run });
+  const result = await updater.check({ enabled: true });
+  assert.equal(result.lastResult.status, 'up-to-date');
+  assert.deepEqual(result.lastResult.changedFiles, []);
+});

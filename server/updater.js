@@ -179,6 +179,10 @@ export function createUpdater(options) {
 
       const after = await run(['rev-parse', 'HEAD']);
       const afterSha = after.stdout.trim();
+      if (afterSha === beforeSha) {
+        // 本地已包含远端提交（或领先于远端）时 merge 是空操作，按已最新处理
+        return finish({ status: 'up-to-date', message: '已是最新版本', changedFiles: [], needRestart: false, needRefresh: false, onlyStyle: false });
+      }
       const diff = await run(['diff', '--name-only', beforeSha, afterSha]);
       const changedFiles = diff.stdout
         .split(/\r?\n/)
