@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>项目雷达</title>
+  <meta name="description" content="项目雷达把工作区里做过的项目按最近更新时间排成卡片墙：搜索、按标签筛选、查看用途概要，并直接运行本地服务。扫描结果通过 SSE 实时同步。">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#131209">
+  <meta property="og:title" content="项目雷达">
+  <meta property="og:description" content="工作区项目索引：按最近更新时间排成卡片墙，搜索、筛选、一键运行。">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="./fonts/Geist-Regular.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="./fonts/Geist-Medium.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="./fonts/Geist-SemiBold.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到项目列表</a>
+
+  <header class="site-header">
+    <div class="shell nav-shell">
+      <div class="nav-left">
+      <a class="brand" href="./" aria-label="项目雷达 首页">
+        <svg class="brand-mark" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.5"/>
+          <circle cx="12" cy="12" r="5" stroke="currentColor" stroke-opacity="0.65" stroke-width="1.5"/>
+          <path d="M12 12 18.5 5.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          <circle cx="12" cy="12" r="2" fill="currentColor"/>
+        </svg>
+        <span class="brand-copy">
+          <span class="brand-name">项目雷达</span>
+          <span class="brand-latin">PROJECT SCAN</span>
+        </span>
+      </a>
+      <p class="scan-status" id="scan-status" data-state="idle">
+        <span class="scan-dot" aria-hidden="true"></span>
+        <span class="scan-text" id="scan-text">正在读取扫描状态</span>
+      </p>
+      </div>
+
+      <nav class="nav-actions" aria-label="扫描控制">
+        <button class="btn btn-ghost btn-running" id="running-button" type="button" aria-haspopup="dialog" aria-label="运行中的项目，共 0 个">
+          <span class="running-dot" aria-hidden="true"></span>
+          <span class="btn-running-label"><span class="running-text">运行中</span> <span class="running-dash">-</span> <span class="running-count" id="running-count">0</span></span>
+          <span class="running-count-mobile" id="running-count-mobile" aria-hidden="true">0</span>
+        </button>
+        <button class="btn btn-ghost btn-workspaces" id="workspaces-button" type="button" aria-haspopup="dialog" aria-label="管理工作区">
+          <svg class="icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.6L7.5 4.6h5A1.5 1.5 0 0 1 14 6.1v5.4A1.5 1.5 0 0 1 12.5 13h-9A1.5 1.5 0 0 1 2 11.5v-7Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M2 7h12" stroke="currentColor" stroke-width="1.4"/></svg>
+          <span class="btn-workspaces-label">工作区</span>
+          <span class="ws-count" id="workspace-count" hidden>2</span>
+        </button>
+        <button class="btn btn-ghost btn-scan" id="scan-button" type="button">
+          <svg class="icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M13.5 8a5.5 5.5 0 1 1-1.7-3.96M13.5 2.5v3h-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span id="scan-button-label">手动扫描</span>
+        </button>
+        <button class="btn btn-ghost btn-settings" id="settings-button" type="button" aria-haspopup="dialog" aria-label="设置">
+          <svg class="icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.6 1.9h2.8l.35 1.6 1.05.44 1.35-.9 1.98 1.98-.9 1.35.44 1.05 1.6.35v2.8l-1.6.35-.44 1.05.9 1.35-1.98 1.98-1.35-.9-1.05.44-.35 1.6H6.6l-.35-1.6-1.05-.44-1.35.9-1.98-1.98.9-1.35-.44-1.05-1.6-.35v-2.8l1.6-.35.44-1.05-.9-1.35 1.98-1.98 1.35.9 1.05-.44Z" stroke="currentColor" stroke-width="1.15" stroke-linejoin="round"/><circle cx="8" cy="8" r="1.9" stroke="currentColor" stroke-width="1.15"/></svg>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero shell" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="eyebrow-line" aria-hidden="true"></span>工作区索引 · 只读扫描</p>
+        <h1 class="hero-title" id="hero-title"><span class="word" style="--i:0">正在读取</span> <span class="word" style="--i:1">工作区</span></h1>
+        <p class="hero-meta" id="hero-meta">正在读取工作区…</p>
+      </div>
+      <dl class="hero-stats" id="hero-stats" aria-label="工作区概览">
+        <div class="stat"><dt>项目总数</dt><dd data-stat="count">--</dd></div>
+        <div class="stat"><dt>子项目</dt><dd data-stat="subprojects">--</dd></div>
+        <div class="stat"><dt>可直接运行</dt><dd data-stat="runnable">--</dd></div>
+      </dl>
+    </section>
+
+    <section class="toolbar" aria-label="搜索、排序与标签筛选">
+      <div class="shell toolbar-shell">
+        <div class="toolbar-row">
+          <div class="search-field">
+            <svg class="search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.5"/>
+              <path d="m10.5 10.5 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <label class="visually-hidden" for="search-input">搜索项目</label>
+            <input class="search-input" id="search-input" type="search" placeholder="搜索项目名、摘要或标签" autocomplete="off" spellcheck="false" enterkeyhint="search">
+            <button class="search-clear" id="search-clear" type="button" aria-label="清空搜索" hidden>
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                <path d="m2 2 8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+          <div class="toolbar-tools">
+            <div class="ws-filter" id="ws-filter" hidden>
+              <button class="btn btn-ghost btn-ws-filter" id="ws-filter-button" type="button" aria-haspopup="listbox" aria-expanded="false">
+                <svg class="icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m8 2 5.5 2.8L8 7.6 2.5 4.8 8 2Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="m2.5 8 5.5 2.8L13.5 8" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="m2.5 11.2 5.5 2.8 5.5-2.8" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+                <span id="ws-filter-label">全部工作区</span>
+                <svg class="ws-filter-caret" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="m2 4 3 3 3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <div class="filter-menu" id="ws-filter-menu" role="listbox" aria-labelledby="ws-filter-button" hidden></div>
+            </div>
+            <div class="sort-group" id="sort-group" role="group" aria-label="排序方式">
+              <button class="sort-btn" type="button" data-sort="updated" aria-pressed="true">最近更新</button>
+              <button class="sort-btn" type="button" data-sort="name" aria-pressed="false">名称</button>
+            </div>
+          </div>
+        </div>
+        <div class="tag-row">
+          <span class="tag-row-label" id="tag-row-label">标签</span>
+          <div class="tag-filters" id="tag-filters" role="group" aria-labelledby="tag-row-label"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="index shell" aria-labelledby="index-title">
+      <div class="section-head">
+        <h2 class="section-title" id="index-title">项目列表</h2>
+        <div class="section-head-right">
+          <div class="status-seg" id="status-seg" role="group" aria-label="按可见状态筛选">
+            <button class="status-seg-btn" type="button" data-status="available" aria-pressed="true">可用<span class="status-seg-count">0</span></button>
+            <button class="status-seg-btn" type="button" data-status="hidden" aria-pressed="false">已隐藏<span class="status-seg-count">0</span></button>
+            <button class="status-seg-btn" type="button" data-status="all" aria-pressed="false">全部<span class="status-seg-count">0</span></button>
+          </div>
+          <p class="result-count" id="result-count" aria-live="polite">正在读取工作区…</p>
+        </div>
+      </div>
+
+      <div class="state-region" id="state-region" aria-busy="true">
+        <div class="skeleton-grid" id="skeleton-grid" aria-hidden="true">
+          <div class="skeleton-card">
+            <div class="skeleton-top"><span class="sk sk-index"></span><span class="sk sk-dot"></span></div>
+            <div class="sk sk-title"></div>
+            <div class="sk sk-title sk-short"></div>
+            <div class="sk sk-time"></div>
+            <div class="sk-lines"><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line sk-line-short"></span></div>
+            <div class="sk-tags"><span class="sk sk-chip"></span><span class="sk sk-chip"></span></div>
+          </div>
+          <div class="skeleton-card">
+            <div class="skeleton-top"><span class="sk sk-index"></span><span class="sk sk-dot"></span></div>
+            <div class="sk sk-title"></div>
+            <div class="sk sk-title sk-short"></div>
+            <div class="sk sk-time"></div>
+            <div class="sk-lines"><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line sk-line-short"></span></div>
+            <div class="sk-tags"><span class="sk sk-chip"></span><span class="sk sk-chip"></span></div>
+          </div>
+          <div class="skeleton-card">
+            <div class="skeleton-top"><span class="sk sk-index"></span><span class="sk sk-dot"></span></div>
+            <div class="sk sk-title"></div>
+            <div class="sk sk-title sk-short"></div>
+            <div class="sk sk-time"></div>
+            <div class="sk-lines"><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line sk-line-short"></span></div>
+            <div class="sk-tags"><span class="sk sk-chip"></span><span class="sk sk-chip"></span></div>
+          </div>
+          <div class="skeleton-card">
+            <div class="skeleton-top"><span class="sk sk-index"></span><span class="sk sk-dot"></span></div>
+            <div class="sk sk-title"></div>
+            <div class="sk sk-title sk-short"></div>
+            <div class="sk sk-time"></div>
+            <div class="sk-lines"><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line sk-line-short"></span></div>
+            <div class="sk-tags"><span class="sk sk-chip"></span><span class="sk sk-chip"></span></div>
+          </div>
+          <div class="skeleton-card">
+            <div class="skeleton-top"><span class="sk sk-index"></span><span class="sk sk-dot"></span></div>
+            <div class="sk sk-title"></div>
+            <div class="sk sk-title sk-short"></div>
+            <div class="sk sk-time"></div>
+            <div class="sk-lines"><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line sk-line-short"></span></div>
+            <div class="sk-tags"><span class="sk sk-chip"></span><span class="sk sk-chip"></span></div>
+          </div>
+          <div class="skeleton-card">
+            <div class="skeleton-top"><span class="sk sk-index"></span><span class="sk sk-dot"></span></div>
+            <div class="sk sk-title"></div>
+            <div class="sk sk-title sk-short"></div>
+            <div class="sk sk-time"></div>
+            <div class="sk-lines"><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line sk-line-short"></span></div>
+            <div class="sk-tags"><span class="sk sk-chip"></span><span class="sk sk-chip"></span></div>
+          </div>
+        </div>
+
+        <div class="card-grid" id="card-grid" hidden></div>
+
+        <div class="state-panel" id="empty-state" hidden>
+          <svg class="state-icon" width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+            <circle cx="20" cy="20" r="14" stroke="currentColor" stroke-opacity="0.5" stroke-width="1.5"/>
+            <circle cx="20" cy="20" r="7.5" stroke="currentColor" stroke-opacity="0.7" stroke-width="1.5"/>
+            <path d="M20 20 30.5 9.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <circle cx="20" cy="20" r="2.5" fill="currentColor"/>
+          </svg>
+          <h3 class="state-title" id="empty-title">还没有可显示的项目</h3>
+          <p class="state-desc" id="empty-desc">扫描工作区后，做过的项目会按最近更新时间出现在这里。</p>
+          <button class="btn btn-secondary" id="empty-action" type="button">重新扫描</button>
+        </div>
+
+        <div class="state-panel" id="error-state" hidden>
+          <svg class="state-icon" width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+            <circle cx="20" cy="20" r="14" stroke="currentColor" stroke-opacity="0.6" stroke-width="1.5"/>
+            <path d="M20 13v9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <circle cx="20" cy="27" r="1.5" fill="currentColor"/>
+          </svg>
+          <h3 class="state-title" id="error-title">读取工作区失败</h3>
+          <p class="state-desc" id="error-desc">无法读取项目数据。</p>
+          <button class="btn btn-secondary" id="error-retry" type="button">重试</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="shell footer-shell">
+      <p>项目雷达 · 只读扫描工作区，不会修改任何项目文件。</p>
+      <p class="footer-meta">
+        <span id="footer-source">数据保存在 project-scan/data</span>
+        <span class="sep" aria-hidden="true">·</span>
+        <span>v1.0.0</span>
+      </p>
+    </div>
+  </footer>
+
+  <div class="drawer-scrim" id="drawer-scrim" hidden></div>
+  <aside class="drawer" id="drawer-1" role="dialog" aria-modal="true" aria-labelledby="drawer-1-title" hidden></aside>
+  <aside class="drawer drawer--second" id="drawer-2" role="dialog" aria-modal="true" aria-labelledby="drawer-2-title" hidden></aside>
+
+  <div class="modal-scrim" id="running-scrim" hidden></div>
+  <section class="modal modal--running" id="running-modal" role="dialog" aria-modal="true" aria-labelledby="running-modal-title" hidden>
+    <header class="modal-head">
+      <div class="modal-head-copy">
+        <p class="modal-kicker">运行实例</p>
+        <h2 class="modal-title" id="running-modal-title">运行中的项目<span class="modal-title-count" id="running-modal-count">0</span></h2>
+      </div>
+      <button class="icon-btn" id="running-close" type="button" aria-label="关闭运行中项目"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="m2 2 10 10M12 2 2 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+    </header>
+    <div class="modal-body">
+      <p class="ws-error" id="running-error" role="alert" hidden></p>
+      <ul class="run-list" id="running-list"></ul>
+      <div class="run-empty" id="running-empty" hidden>
+        <p class="state-title">当前没有运行中的项目</p>
+        <p class="state-desc">在项目卡片上点「运行」启动本地服务后，运行状态和访问地址会出现在这里。</p>
+      </div>
+    </div>
+    <footer class="modal-foot modal-foot--running">
+      <label class="run-scanner-option">
+        <span class="run-check">
+          <input class="settings-input" type="checkbox" id="running-include-scanner">
+          <span class="settings-box" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="m2 6.5 2.5 2.5L10 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        </span>
+        <span class="run-scanner-copy">
+          <span class="run-scanner-title">包含当前扫描器</span>
+          <span class="run-scanner-hint" id="running-scanner-hint">勾选后「全部停止」会同时关闭扫描器服务，页面将断开连接。</span>
+        </span>
+      </label>
+      <button class="btn btn-danger" id="running-stop-all" type="button">全部停止</button>
+    </footer>
+  </section>
+
+  <div class="modal-scrim" id="ws-scrim" hidden></div>
+  <section class="modal" id="ws-modal" role="dialog" aria-modal="true" aria-labelledby="ws-modal-title" hidden>
+    <header class="modal-head">
+      <div class="modal-head-copy">
+        <p class="modal-kicker">工作区</p>
+        <h2 class="modal-title" id="ws-modal-title">管理扫描目录</h2>
+      </div>
+      <button class="icon-btn" id="ws-close" type="button" aria-label="关闭工作区管理"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="m2 2 10 10M12 2 2 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+    </header>
+    <div class="modal-body">
+      <section class="ws-section">
+        <div class="drawer-label-row">
+          <h3 class="drawer-label">已加入的工作区</h3>
+          <span class="children-count" id="ws-list-count"></span>
+        </div>
+        <ul class="ws-list" id="ws-list"></ul>
+        <p class="ws-hint" id="ws-limit-hint"></p>
+      </section>
+      <section class="ws-section">
+        <h3 class="drawer-label">添加工作区</h3>
+        <form class="ws-add-form" id="ws-add-form" novalidate>
+          <label class="visually-hidden" for="ws-path-input">工作区目录路径</label>
+          <div class="ws-input-row">
+            <input class="ws-input" id="ws-path-input" type="text" placeholder="/Users/you/another_projects" autocomplete="off" spellcheck="false">
+            <button class="btn btn-secondary" id="ws-browse" type="button">浏览…</button>
+            <button class="btn btn-run" id="ws-add" type="submit">添加</button>
+          </div>
+        </form>
+        <p class="ws-error" id="ws-error" role="alert" hidden></p>
+        <p class="ws-hint">只读扫描所选目录里的项目；添加后会触发一次扫描。</p>
+      </section>
+    </div>
+  </section>
+
+  <div class="modal-scrim" id="fs-scrim" hidden></div>
+  <section class="modal modal--picker" id="fs-modal" role="dialog" aria-modal="true" aria-labelledby="fs-modal-title" hidden>
+    <header class="modal-head">
+      <div class="modal-head-copy">
+        <p class="modal-kicker">选择目录</p>
+        <h2 class="modal-title" id="fs-modal-title">浏览本地目录</h2>
+      </div>
+      <button class="icon-btn" id="fs-close" type="button" aria-label="关闭目录选择"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="m2 2 10 10M12 2 2 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+    </header>
+    <div class="modal-body">
+      <div class="fs-toolbar">
+        <button class="btn btn-quiet" id="fs-up" type="button">上一级</button>
+        <code class="fs-path" id="fs-path"></code>
+      </div>
+      <div class="fs-jumps">
+        <button class="btn btn-quiet" id="fs-home" type="button">主目录</button>
+        <button class="btn btn-quiet" id="fs-default" type="button">默认工作区</button>
+      </div>
+      <p class="ws-error" id="fs-error" role="alert" hidden></p>
+      <ul class="fs-list" id="fs-list" aria-label="子目录列表"></ul>
+      <p class="fs-empty" id="fs-empty" hidden>这个目录下没有可进入的子目录。</p>
+    </div>
+    <footer class="modal-foot">
+      <button class="btn btn-secondary" id="fs-cancel" type="button">取消</button>
+      <button class="btn btn-run" id="fs-choose" type="button">选择此目录</button>
+    </footer>
+  </section>
+
+  <div class="modal-scrim" id="settings-scrim" hidden></div>
+  <section class="modal modal--settings" id="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title" hidden>
+    <header class="modal-head">
+      <div class="modal-head-copy">
+        <h2 class="modal-title" id="settings-modal-title">偏好设置</h2>
+      </div>
+      <button class="icon-btn" id="settings-close" type="button" aria-label="关闭设置"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="m2 2 10 10M12 2 2 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+    </header>
+    <div class="settings-tabs" id="settings-tabs" role="tablist" aria-label="设置分类">
+      <button class="settings-tab" id="settings-tab-monitor" type="button" role="tab" aria-selected="true" aria-controls="settings-panel-monitor" tabindex="0" data-settings-tab="monitor">运行监控</button>
+      <button class="settings-tab" id="settings-tab-llm" type="button" role="tab" aria-selected="false" aria-controls="settings-panel-llm" tabindex="-1" data-settings-tab="llm">AI 摘要</button>
+      <button class="settings-tab" id="settings-tab-hidden" type="button" role="tab" aria-selected="false" aria-controls="settings-panel-hidden" tabindex="-1" data-settings-tab="hidden">隐藏项目</button>
+      <button class="settings-tab" id="settings-tab-update" type="button" role="tab" aria-selected="false" aria-controls="settings-panel-update" tabindex="-1" data-settings-tab="update">更新</button>
+    </div>
+    <div class="modal-body">
+      <section class="ws-section settings-panel" id="settings-panel-monitor" role="tabpanel" aria-labelledby="settings-tab-monitor" tabindex="0">
+        <h3 class="drawer-label">运行监控</h3>
+        <div class="settings-switch-row">
+          <div class="settings-switch-copy">
+            <p class="settings-switch-title">实时占用监控</p>
+            <p class="ws-hint">开启后对正在运行的项目每秒采样 CPU、内存与网络，只在有项目运行时采样，关闭后立即停止。默认关闭以减少资源占用。</p>
+          </div>
+          <button class="switch" id="monitor-toggle" type="button" role="switch" aria-checked="false" aria-label="运行监控开关">
+            <span class="switch-knob" aria-hidden="true"></span>
+          </button>
+        </div>
+        <p class="ws-error" id="monitor-error" role="alert" hidden></p>
+      </section>
+      <section class="ws-section settings-panel" id="settings-panel-llm" role="tabpanel" aria-labelledby="settings-tab-llm" tabindex="0" hidden>
+        <h3 class="drawer-label">AI 摘要渠道</h3>
+        <div class="settings-field">
+          <label class="settings-field-label" for="llm-channel">渠道</label>
+          <select class="settings-select" id="llm-channel" aria-describedby="llm-hint">
+            <option value="">跟随 DSH 默认（推荐）</option>
+          </select>
+        </div>
+        <div class="settings-field">
+          <label class="settings-field-label" for="llm-model">模型</label>
+          <select class="settings-select" id="llm-model" aria-describedby="llm-hint" disabled>
+            <option value="">跟随 DSH 默认</option>
+          </select>
+        </div>
+        <p class="ws-hint" id="llm-status" role="status" aria-live="polite" aria-atomic="true">正在读取本机 DSH 渠道…</p>
+        <p class="ws-error" id="llm-error" role="alert" hidden></p>
+        <button class="btn btn-quiet settings-llm-retry" id="llm-retry" type="button" hidden>重试</button>
+        <p class="ws-hint" id="llm-hint">渠道和模型来自本机 DSH 配置；API key 不保存在本项目，使用 DSH 环境变量/凭据。</p>
+      </section>
+      <section class="ws-section settings-panel" id="settings-panel-hidden" role="tabpanel" aria-labelledby="settings-tab-hidden" tabindex="0" hidden>
+        <div class="drawer-label-row">
+          <h3 class="drawer-label">隐藏项目</h3>
+          <span class="children-count" id="settings-hidden-count">已隐藏 0 个项目</span>
+        </div>
+        <p class="ws-hint">勾选后从默认「可用」视图隐藏，可在「已隐藏」「全部」里找到；不影响扫描与运行。</p>
+        <div class="settings-search">
+          <svg class="settings-search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.5"/><path d="m10.5 10.5 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <label class="visually-hidden" for="settings-search">搜索要隐藏的项目</label>
+          <input class="search-input settings-search-input" id="settings-search" type="search" placeholder="按名称或工作区搜索" autocomplete="off" spellcheck="false">
+        </div>
+        <p class="ws-error" id="settings-error" role="alert" hidden></p>
+        <ul class="settings-list" id="settings-list"></ul>
+        <p class="settings-empty" id="settings-empty" hidden>还没有可以设置的项目。</p>
+      </section>
+      <section class="ws-section settings-panel" id="settings-panel-update" role="tabpanel" aria-labelledby="settings-tab-update" tabindex="0" hidden>
+        <h3 class="drawer-label">自动更新</h3>
+        <div class="settings-switch-row">
+          <div class="settings-switch-copy">
+            <p class="settings-switch-title">自动更新</p>
+            <p class="ws-hint">服务端定期检查并自动拉取新版本；仅在工作区干净且配置了远端时执行，更新后只提示重启或刷新。</p>
+          </div>
+          <button class="switch" id="update-toggle" type="button" role="switch" aria-checked="true" aria-label="自动更新开关">
+            <span class="switch-knob" aria-hidden="true"></span>
+          </button>
+        </div>
+        <p class="ws-error" id="update-error" role="alert" hidden></p>
+        <div class="drawer-label-row">
+          <h3 class="drawer-label">更新状态</h3>
+          <button class="btn btn-secondary settings-update-check" id="update-check" type="button">立即检查更新</button>
+        </div>
+        <p class="ws-hint" id="update-status" role="status" aria-live="polite" aria-atomic="true">正在读取更新状态…</p>
+        <p class="update-restart" id="update-restart" hidden>需重启服务后生效</p>
+        <button class="btn btn-quiet settings-update-refresh" id="update-refresh" type="button" hidden>刷新页面</button>
+      </section>
+
+    </div>
+  </section>
+
+  <div class="toast-stack" id="toast-stack" role="status" aria-live="polite"></div>
+  <pre class="visually-hidden" id="js-error-log" aria-hidden="true"></pre>
+
+  <noscript>
+    <p class="noscript">项目雷达需要 JavaScript 才能读取并渲染项目列表。</p>
+  </noscript>
+  <script src="./app.js" defer></script>
+</body>
+</html>

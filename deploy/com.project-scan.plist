@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.project-scan</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>server/index.js</string>
+  </array>
+  <!-- 改成 project-scan 实际所在目录 -->
+  <key>WorkingDirectory</key>
+  <string>/Users/you/workspace/dsh-project-scan</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PORT</key>
+    <string>8790</string>
+    <key>PROJECT_SCAN_ROOT</key>
+    <string>/Users/you/workspace</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/tmp/project-scan.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/project-scan.err.log</string>
+</dict>
+</plist>

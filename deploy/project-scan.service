@@ -1,0 +1,17 @@
+[Unit]
+Description=Project Scan (项目雷达)
+After=network.target
+
+[Service]
+Type=simple
+# 改成 project-scan 实际所在目录
+WorkingDirectory=%h/workspace/dsh-project-scan
+# 默认工作区 = project-scan 的上一级；要扫描别处请设置 PROJECT_SCAN_ROOT
+Environment=PORT=8790
+Environment=PROJECT_SCAN_ROOT=%h/workspace
+ExecStart=/usr/bin/env node server/index.js
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

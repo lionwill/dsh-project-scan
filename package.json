@@ -1,0 +1,16 @@
+{
+  "name": "project-scan",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "项目雷达：扫描工作区项目，按最近更新时间可视化，并支持一键运行",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "enrich": "node scripts/enrich.mjs --scan --report",
+    "test": "node --test"
+  }
+}

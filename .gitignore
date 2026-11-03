@@ -1,0 +1,22 @@
+# 运行时数据（扫描索引、工作区/隐藏/设置、LLM 缓存、README 复制日志、服务日志）
+data/
+
+# 依赖与构建产物
+node_modules/
+dist/
+build/
+
+# 本地环境与临时文件
+.env
+.env.*
+*.log
+*.tmp
+.DS_Store
+
+# 编辑器
+.vscode/
+.idea/
+
+# 文档：仓库只保留 README，其余 Markdown 不上传
+*.md
+!README.md

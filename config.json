@@ -1,0 +1,36 @@
+{
+  "excludeDirs": {
+    "android-toolchain": "Android 工具链缓存目录（SDK / Gradle 缓存），不是项目",
+    "backup": "备份目录，只有压缩包",
+    "downloads": "下载缓存目录，没有项目文件",
+    "font": "字体素材目录，没有代码",
+    "icon": "图标素材目录（纯 SVG / PNG），没有代码",
+    "text file": "文本下载目录，没有项目",
+    "3d_models": "3D 模型素材目录，没有代码"
+  },
+  "includeDirs": [],
+  "skipDirs": [
+    "node_modules",
+    "dist",
+    "build",
+    "coverage",
+    "target",
+    "vendor",
+    "Pods",
+    "DerivedData",
+    "bower_components",
+    "__pycache__",
+    "venv",
+    "site-packages"
+  ],
+  "maxDepth": 5,
+  "concurrency": 6,
+  "readmeMaxBytes": 65536,
+  "packageJsonMaxBytes": 262144,
+  "gitTimeoutMs": 5000,
+  "children": {
+    "maxDepth": 2,
+    "maxPerParent": 12,
+    "maxTotal": 60
+  }
+}
