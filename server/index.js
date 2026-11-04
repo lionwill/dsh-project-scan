@@ -16,6 +16,7 @@ import { createPreferences } from './preferences.js';
 import { createDiskUsage } from './disk-usage.js';
 import { createMonitor } from './monitor.js';
 import { createUpdater } from './updater.js';
+import { createExternalRuns } from './external-runs.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -94,6 +95,11 @@ const updater = createUpdater({
   log: function (message) { console.log(message); },
   onEvent: function (payload) { broadcast('update', payload); }
 });
+const externalRuns = createExternalRuns({
+  log: function (message) { console.log(message); },
+  getProjects: function () { return store.allProjects().map(function (project) { return { id: project.id, path: project.path }; }); }
+});
+let externalRunsTimer = null;
 const MAX_WORKSPACES = 10;
 const sseClients = new Set();
 const activeRuns = new Map();
@@ -166,6 +172,33 @@ function listRunningProjects(options) {
       command: run.command || null,
       isScannerProject: path.resolve(project.path) === APP_DIR
     });
+  }
+  // 外部启动的实例（不是本服务 runner 启动的）：也列入「运行中」，前端以只读方式展示
+  if (opts.includeExternal !== false) {
+    for (const project of store.allProjects()) {
+      if (isScannerProject(project)) continue;
+      const managed = runner.state(project.id);
+      if (managed && isRunActiveStatus(managed.status)) continue;
+      const external = externalRuns.matchFor(project.id);
+      if (!external) continue;
+      running.push({
+        projectId: project.id,
+        name: project.name,
+        workspaceId: project.workspaceId || 'main',
+        workspaceName: project.workspaceName || path.basename(WORKSPACE_ROOT),
+        parentId: project.parentId || null,
+        relPath: project.relPath || '',
+        status: 'running',
+        url: external.url,
+        pid: external.pid,
+        startedAt: null,
+        uptimeSec: 0,
+        command: null,
+        isScannerProject: false,
+        isExternalProject: true,
+        external: true
+      });
+    }
   }
   running.sort(function (a, b) {
     return String(b.startedAt || '').localeCompare(String(a.startedAt || ''));
@@ -421,6 +454,33 @@ function scannerServiceRunState(projectId) {
   };
 }
 
+/** 外部启动（非本服务 runner）的运行实例 → 兼容 RunState 的只读快照。 */
+function externalRunState(projectId, entry) {
+  return {
+    runId: 'external-' + entry.pid,
+    projectId: projectId,
+    status: 'running',
+    url: entry.url,
+    command: null,
+    cwd: entry.cwd,
+    pid: entry.pid,
+    startedAt: null,
+    endedAt: null,
+    exitCode: null,
+    log: ['[external] 检测到外部启动的服务：' + entry.command + '（PID ' + entry.pid + '）'],
+    external: true
+  };
+}
+
+/** 项目当前生效的运行状态：runner 管理的优先，其次外部检测到的实例。 */
+function runStateFor(project) {
+  const managed = runner.state(project.id);
+  if (managed) return managed;
+  if (isScannerProject(project)) return null;
+  const external = externalRuns.matchFor(project.id);
+  return external ? externalRunState(project.id, external) : null;
+}
+
 function serializeProject(project) {
   let runInfo;
   try {
@@ -439,7 +499,7 @@ function serializeProject(project) {
     runKind: runInfo.kind || 'none',
     runHint: runInfo.runHint || '',
     runInfo: runInfo,
-    run: isScannerProject(project) ? scannerServiceRunState(project.id) : runner.state(project.id),
+    run: isScannerProject(project) ? scannerServiceRunState(project.id) : runStateFor(project),
     isScanner: isScannerProject(project),
     hidden: preferences.isHidden(project.parentId || project.id)
   });
@@ -1180,6 +1240,20 @@ async function start() {
     console.log('[project-scan] 已启动：http://' + HOST + ':' + PORT);
     console.log('[project-scan] 扫描窗口：每天 ' + scheduler.status().windowStartHour + ':00 到 ' + scheduler.status().windowEndHour + ':00，每 ' + scheduler.status().intervalMinutes + ' 分钟一次');
     scheduleDiskUsage(1200);
+    // 外部启动实例检测：每 5 秒刷新一次，有变化时推送项目列表（卡片运行状态实时更新）
+    async function refreshExternalRuns() {
+      try {
+        const result = await externalRuns.refresh();
+        if (result.changed) {
+          broadcast('projects', { projects: store.list().map(serializeProject) });
+        }
+      } catch (err) {
+        console.error('[external-runs] 刷新失败：' + ((err && err.message) || err));
+      }
+    }
+    externalRunsTimer = setInterval(refreshExternalRuns, 5000);
+    if (externalRunsTimer && typeof externalRunsTimer.unref === 'function') externalRunsTimer.unref();
+    refreshExternalRuns();
     // 启动时后台静默检查 git 更新（默认开启，可在设置里关闭；PROJECT_SCAN_AUTO_UPDATE=off 部署级关闭）
     const autoUpdateEnv = String(process.env.PROJECT_SCAN_AUTO_UPDATE || '').toLowerCase();
     const autoUpdateEnabled = autoUpdateEnv !== 'off' && Boolean(preferences.getSettings().autoUpdate);
@@ -1211,6 +1285,7 @@ async function shutdown(signal) {
   console.log('[project-scan] 收到 ' + signal + '，正在退出');
   try { scheduler.stop(); } catch (err) {}
   try { monitor.setEnabled(false); monitor.stop(); } catch (err) {}
+  try { if (externalRunsTimer) clearInterval(externalRunsTimer); } catch (err) {}
   try { await runner.shutdown(); } catch (err) {}
   for (const client of sseClients) {
     try { client.end(); } catch (err) {}

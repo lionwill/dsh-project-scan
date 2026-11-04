@@ -501,6 +501,50 @@
     return Boolean(run && (run.status === "starting" || run.status === "running"));
   }
 
+  function isExternalRun(run) {
+    return Boolean(run && run.external === true);
+  }
+
+  function isExternalEntry(entry) {
+    return Boolean(entry && (entry.external === true || entry.isExternalProject === true));
+  }
+
+  function openRunAddress(url, name) {
+    const target = url ? String(url) : "";
+    if (!target) {
+      toast("还没有捕获到访问地址", { error: true });
+      return null;
+    }
+    const placeholder = window.open("about:blank", "_blank");
+    if (!placeholder) {
+      window.open(target, "_blank", "noopener");
+      toast("浏览器拦截了新窗口，已尝试重新打开访问地址");
+      return null;
+    }
+    try {
+      placeholder.document.title = "正在打开" + (name ? " " + name : "") + "…";
+      placeholder.document.body.style.background = "#131209";
+    } catch (error) {
+      /* 跨窗口访问被拒绝时忽略 */
+    }
+    try {
+      placeholder.location.replace(target);
+    } catch (error) {
+      window.open(target, "_blank", "noopener");
+    }
+    return placeholder;
+  }
+
+  function openProjectRun(id) {
+    const project = getProject(id);
+    if (!project) return;
+    if (!project.run || !project.run.url) {
+      toast("还没有捕获到访问地址", { error: true });
+      return;
+    }
+    openRunAddress(project.run.url, project.name);
+  }
+
   function getProject(id) {
     if (!id) return null;
     for (let i = 0; i < state.projects.length; i += 1) {
@@ -1083,6 +1127,9 @@
   }
 
   function cardStateTitle(project, info, running) {
+    if (running && isExternalRun(project.run)) {
+      return "正在运行 · 外部启动（由外部终端启动，本服务不能停止）";
+    }
     if (running) return "正在运行";
     if (info.runnable) {
       return "当前未运行 · 可运行：" + (info.runHint || info.command || "已检测到运行入口");
@@ -1117,6 +1164,15 @@
     if (running && project.isScanner) {
       runControl =
         '<span class="run-tooltip" title="扫描器服务由外部 start.sh 启动，不能在这里单独停止；如需停止，请在顶部「运行中」弹层勾选「包含当前扫描器」后全部停止"><span class="btn btn-run is-scanner" role="status"><span class="status-dot" aria-hidden="true"></span>扫描器运行中</span></span>';
+    } else if (running && isExternalRun(run)) {
+      runControl =
+        '<button class="btn btn-run is-external" type="button" data-action="open" data-id="' +
+        esc(project.id) +
+        '" title="外部启动 · 点击在新标签打开访问地址" aria-label="打开 ' +
+        esc(project.name) +
+        ' 的访问地址"><span class="status-dot" aria-hidden="true"></span>打开' +
+        ARROW_ICON +
+        "</button>";
     } else if (running) {
       runControl =
         '<button class="btn btn-run is-stop" type="button" data-action="stop" data-id="' +
@@ -1169,7 +1225,8 @@
         esc(project.workspaceName) +
         "</span>"
       : "";
-    const muted = compact && !info.runnable && runnableChildren === 0;
+    const external = isExternalRun(run);
+    const muted = compact && !running && !info.runnable && runnableChildren === 0;
     const mutedReason = muted ? '<p class="card-muted-reason">原因：' + esc(reason) + "</p>" : "";
     const diskText = Number.isFinite(project.diskUsageBytes)
       ? formatBytes(project.diskUsageBytes)
@@ -1224,7 +1281,9 @@
       '" aria-hidden="true"></span>' +
       "<span>" +
       esc(cardStateText(project, info, running)) +
-      "</span></span>" +
+      "</span>" +
+      (external ? '<span class="card-external-tag">外部启动</span>' : "") +
+      "</span>" +
       "</div>" +
       '<h3 class="card-title">' +
       esc(project.name) +
@@ -3179,6 +3238,8 @@
       uptimeSec: uptimeSec,
       command: run && run.command ? run.command : null,
       isScannerProject: project.id === "project-scan",
+      external: isExternalRun(run),
+      isExternalProject: isExternalRun(run),
     };
   }
 
@@ -3245,6 +3306,7 @@
 
   function runningRowHTML(entry) {
     const isScannerService = Boolean(entry.isScannerProject && !entry.projectId);
+    const external = !isScannerService && isExternalEntry(entry);
     const parent = entry.parentId ? getProject(entry.parentId) : null;
     const metaParts = [];
     if (isScannerService) {
@@ -3256,21 +3318,25 @@
       const parentName = parent ? parent.name : entry.parentId;
       metaParts.push(parentName + " / " + (entry.relPath || entry.name));
     }
-    metaParts.push("已运行 " + formatUptime(entry.uptimeSec));
+    metaParts.push(external ? "已运行 —" : "已运行 " + formatUptime(entry.uptimeSec));
     const busy = state.runningBusy.has(entry.projectId);
     const starting = entry.status === "starting";
+    const projectName = entry.name || entry.projectId || "项目";
     return (
-      '<li class="run-row"><div class="run-row-main">' +
+      '<li class="run-row' +
+      (external ? " is-external" : "") +
+      '"><div class="run-row-main">' +
       '<p class="run-row-head"><span class="status-dot ' +
       (starting ? "is-starting" : "is-live") +
       '" aria-hidden="true"></span>' +
       '<span class="run-row-name">' +
-      esc(entry.name || entry.projectId) +
+      esc(projectName) +
       "</span>" +
       '<span class="run-row-state">' +
       esc(starting ? "启动中" : "运行中") +
       "</span>" +
       (entry.isScannerProject ? '<span class="run-row-tag">扫描器</span>' : "") +
+      (external ? '<span class="run-row-tag is-external">外部启动</span>' : "") +
       "</p>" +
       '<p class="run-row-meta">' +
       esc(metaParts.join(" · ")) +
@@ -3285,16 +3351,26 @@
       '</div><div class="run-row-actions">' +
       (isScannerService
         ? '<span class="run-row-note" title="扫描器由外部 start.sh 启动，不能单独重启或停止；需要关闭时用底部「全部停止」并勾选「包含当前扫描器」">外部启动</span>'
-        : '<button class="btn btn-quiet run-action" type="button" data-run-action="restart" data-run-project="' +
-          esc(entry.projectId) +
-          '"' +
-          (busy ? " disabled" : "") +
-          ">重启</button>" +
-          '<button class="btn btn-quiet run-action" type="button" data-run-action="stop" data-run-project="' +
-          esc(entry.projectId) +
-          '"' +
-          (busy ? " disabled" : "") +
-          ">停止</button>") +
+        : external
+          ? entry.url
+            ? '<button class="btn btn-quiet run-action" type="button" data-run-action="open" data-run-url="' +
+              esc(entry.url) +
+              '" data-run-name="' +
+              esc(projectName) +
+              '" aria-label="打开 ' +
+              esc(projectName) +
+              ' 的访问地址">打开</button>'
+            : '<span class="run-row-note">外部启动</span>'
+          : '<button class="btn btn-quiet run-action" type="button" data-run-action="restart" data-run-project="' +
+            esc(entry.projectId) +
+            '"' +
+            (busy ? " disabled" : "") +
+            ">重启</button>" +
+            '<button class="btn btn-quiet run-action" type="button" data-run-action="stop" data-run-project="' +
+            esc(entry.projectId) +
+            '"' +
+            (busy ? " disabled" : "") +
+            ">停止</button>") +
       "</div></li>"
     );
   }
@@ -3317,7 +3393,7 @@
       : [];
     // 扫描器自身不算「项目」；只有扫描器且未勾选包含扫描器时，全部停止没有可执行对象
     const hasProjectEntries = list.some(function (entry) {
-      return !(entry.isScannerProject && !entry.projectId);
+      return !(entry.isScannerProject && !entry.projectId) && !isExternalEntry(entry);
     });
     els.runningStopAll.disabled =
       (!hasProjectEntries && !includeScanner) || state.runningBusy.size > 0;
@@ -3901,6 +3977,7 @@
 
   function renderDrawerLogStatus(panel, project) {
     const run = project ? project.run : null;
+    const external = isExternalRun(run);
     let text = "未运行";
     let live = false;
     if (run) {
@@ -3908,7 +3985,7 @@
         text = "正在启动";
         live = true;
       } else if (run.status === "running") {
-        text = "运行中";
+        text = external ? "运行中 · 外部启动" : "运行中";
         live = true;
       } else if (run.status === "exited") {
         text = "已退出 · 代码 " + (run.exitCode == null ? 0 : run.exitCode);
@@ -3916,8 +3993,18 @@
         text = "启动失败 · 代码 " + (run.exitCode == null ? "未知" : run.exitCode);
       }
     }
-    panel.logStatus.innerHTML =
-      (live ? '<span class="status-dot" aria-hidden="true"></span>' : "") + esc(text);
+    let html = (live ? '<span class="status-dot" aria-hidden="true"></span>' : "") + esc(text);
+    if (external && isRunning(run) && run.url) {
+      html +=
+        '<a class="log-status-url" href="' +
+        esc(run.url) +
+        '" target="_blank" rel="noopener noreferrer" aria-label="打开 ' +
+        esc(project.name) +
+        ' 的访问地址">' +
+        esc(run.url) +
+        "</a>";
+    }
+    panel.logStatus.innerHTML = html;
   }
 
   function updateDrawerLog(panel, lines) {
@@ -3947,11 +4034,21 @@
     const info = runInfoOf(project);
     const run = project.run;
     const running = isRunning(run);
+    const external = running && isExternalRun(run);
     const runnableChildren = (project.children || []).filter((child) => runInfoOf(child).runnable).length;
     let html = "";
     if (running && project.isScanner) {
       html +=
         '<span class="run-tooltip" title="扫描器服务由外部 start.sh 启动，不能单独停止；如需停止，请在顶部「运行中」弹层勾选「包含当前扫描器」后全部停止"><span class="btn btn-run is-scanner" role="status"><span class="status-dot" aria-hidden="true"></span>扫描器运行中</span></span>';
+    } else if (external) {
+      html +=
+        '<button class="btn btn-run is-external" type="button" data-action="open" data-id="' +
+        esc(project.id) +
+        '" aria-label="打开 ' +
+        esc(project.name) +
+        ' 的访问地址"><span class="status-dot" aria-hidden="true"></span>打开' +
+        ARROW_ICON +
+        "</button>";
     } else if (running) {
       html +=
         '<button class="btn btn-run is-stop" type="button" data-action="stop" data-id="' +
@@ -3972,7 +4069,7 @@
         esc(info.reason || "没有找到可识别的运行入口") +
         '">无法运行</button></span>';
     }
-    if (run && run.url && isRunning(run)) {
+    if (!external && run && run.url && isRunning(run)) {
       html +=
         '<a class="btn btn-secondary" href="' +
         esc(run.url) +
@@ -3981,10 +4078,13 @@
     const hint = info.runHint || info.command;
     if (project.isScanner) {
       html += '<p class="drawer-run-hint">入口 · 由外部 start.sh 启动（扫描器自身）</p>';
+    } else if (external) {
+      html +=
+        '<p class="drawer-run-hint is-external">外部启动 · 该实例由外部终端启动，本服务只能打开访问地址，不能停止或重启。</p>';
     } else if (hint) {
       html += '<p class="drawer-run-hint">入口 · ' + esc(hint) + "</p>";
     }
-    if (!info.runnable) {
+    if (!info.runnable && !external) {
       const reasonText =
         runnableChildren > 0
           ? "项目本身没有运行入口，请在下方子项目里选择要运行的项目。"
@@ -4660,6 +4760,7 @@
         const id = action.getAttribute("data-id");
         if (action.getAttribute("data-action") === "run") startRun(id, action);
         else if (action.getAttribute("data-action") === "stop") stopRun(id, action);
+        else if (action.getAttribute("data-action") === "open") openProjectRun(id);
         else if (action.getAttribute("data-action") === "open-children") openTopDrawer(id);
         return;
       }
@@ -4717,8 +4818,11 @@
       const action = event.target.closest("[data-run-action]");
       if (!action) return;
       const projectId = action.getAttribute("data-run-project");
-      if (action.getAttribute("data-run-action") === "restart") restartRunningProject(projectId);
-      else if (action.getAttribute("data-run-action") === "stop") stopRunningProject(projectId);
+      const runAction = action.getAttribute("data-run-action");
+      if (runAction === "open") {
+        openRunAddress(action.getAttribute("data-run-url"), action.getAttribute("data-run-name"));
+      } else if (runAction === "restart") restartRunningProject(projectId);
+      else if (runAction === "stop") stopRunningProject(projectId);
     });
     els.runningStopAll.addEventListener("click", handleStopAll);
     els.runningIncludeScanner.addEventListener("change", () => {
@@ -4811,6 +4915,7 @@
         const id = action.getAttribute("data-id");
         if (action.getAttribute("data-action") === "run") startRun(id, action);
         else if (action.getAttribute("data-action") === "stop") stopRun(id, action);
+        else if (action.getAttribute("data-action") === "open") openProjectRun(id);
       });
       panel.children.addEventListener("click", (event) => {
         const action = event.target.closest("[data-action]");
@@ -4818,6 +4923,7 @@
           const id = action.getAttribute("data-id");
           if (action.getAttribute("data-action") === "run") startRun(id, action);
           else if (action.getAttribute("data-action") === "stop") stopRun(id, action);
+          else if (action.getAttribute("data-action") === "open") openProjectRun(id);
           return;
         }
         const open = event.target.closest("[data-open]");

@@ -682,7 +682,22 @@
       "diskUsageBytes": 925696,
       "diskUsageError": null,
       "diskUsageAt": "2026-11-02T09:20:03.777Z",
-      "run": null,
+      "run": {
+        "runId": "external-demo-10201",
+        "projectId": "reel-demo",
+        "status": "running",
+        "url": "http://127.0.0.1:10201/",
+        "command": null,
+        "cwd": "/Users/demo/workspace/reel-demo",
+        "pid": 89205,
+        "startedAt": null,
+        "endedAt": null,
+        "exitCode": null,
+        "log": [
+          "[external] 演示：检测到外部启动的服务（PID 89205）"
+        ],
+        "external": true
+      },
       "isScanner": false,
       "hidden": false
     },
