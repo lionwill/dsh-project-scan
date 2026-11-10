@@ -123,3 +123,27 @@ test('external-runs：lsof 失败时降级为空匹配并记录错误', async fu
   assert.equal(external.matchFor('p'), null);
   assert.match(external.snapshot().error, /lsof/);
 });
+
+test('external-runs：纯 TCP 监听（无 HTTP 响应，如 postgres）不算运行实例', async function () {
+  const run = fakeRun(function (args) {
+    if (args.indexOf('-iTCP') !== -1) {
+      return {
+        code: 0,
+        stdout: ['p34184', 'cpostgres', 'n127.0.0.1:15432', ''].join('\n'),
+        stderr: ''
+      };
+    }
+    return {
+      code: 0,
+      stdout: ['p34184', 'fcwd', 'n/Users/demo/DHS/weavemind/runtime/pgdata', ''].join('\n'),
+      stderr: ''
+    };
+  });
+  const external = createExternalRuns({
+    run: run,
+    probe: async function () { return null; },
+    getProjects: function () { return [{ id: 'weavemind', path: '/Users/demo/DHS/weavemind' }]; }
+  });
+  await external.refresh();
+  assert.equal(external.matchFor('weavemind'), null, '数据库端口不应显示为项目运行中');
+});

@@ -180,6 +180,8 @@ export function createExternalRuns(options) {
           for (const port of candidate.ports) {
             const url = 'http://127.0.0.1:' + port + '/';
             const probed = await probe(url);
+            // 只把确实响应 HTTP 的端口当项目服务；数据库等纯 TCP 监听（如 postgres:15432）不展示成「运行中」
+            if (!probed) continue;
             const isHtml = Boolean(probed && /text\/html/i.test(probed.contentType || ''));
             const entry = {
               pid: candidate.pid,
