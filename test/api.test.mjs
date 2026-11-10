@@ -219,6 +219,93 @@ test('项目雷达 HTTP API 端到端', async function (t) {
     assert.ok(typeof parent.children[0].diskUsageBytes === 'number', '子项目也应计算磁盘占用');
   });
 
+  await t.test('项目别称 API：设置 / 原名 / 清除 / 校验 / 持久化', async function () {
+    const listBefore = await (await fetch(BASE + '/api/projects')).json();
+    const alpha = listBefore.projects.find(function (p) { return p.id === 'alpha-tool'; });
+    assert.ok(alpha);
+    assert.equal(alpha.alias, null);
+    assert.equal(alpha.originalName, null);
+
+    const setRes = await fetch(BASE + '/api/projects/alpha-tool/alias', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ alias: '  阿尔法  别名 ' })
+    });
+    assert.equal(setRes.status, 200);
+    const setBody = await setRes.json();
+    assert.equal(setBody.alias, '阿尔法 别名');
+    assert.equal(setBody.project.name, '阿尔法 别名');
+    assert.equal(setBody.project.alias, '阿尔法 别名');
+    assert.equal(setBody.project.originalName, '阿尔法工具');
+
+    const detail = await (await fetch(BASE + '/api/projects/alpha-tool')).json();
+    assert.equal(detail.project.name, '阿尔法 别名');
+    assert.equal(detail.project.originalName, '阿尔法工具');
+
+    const listAfter = await (await fetch(BASE + '/api/projects')).json();
+    const alphaAfter = listAfter.projects.find(function (p) { return p.id === 'alpha-tool'; });
+    assert.equal(alphaAfter.name, '阿尔法 别名');
+    assert.equal(alphaAfter.alias, '阿尔法 别名');
+
+    const aliasFile = path.join(workspace, '.data', 'aliases.json');
+    const saved = JSON.parse(fs.readFileSync(aliasFile, 'utf8'));
+    assert.equal(saved.aliases['alpha-tool'], '阿尔法 别名');
+
+    // 子项目 id 也支持
+    const childRes = await fetch(BASE + '/api/projects/parent-app--child-app/alias', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ alias: '子项目别名' })
+    });
+    assert.equal(childRes.status, 200);
+    const childBody = await childRes.json();
+    assert.equal(childBody.project.name, '子项目别名');
+    assert.equal(childBody.project.originalName, '子项目');
+
+    const tooLong = await fetch(BASE + '/api/projects/alpha-tool/alias', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ alias: 'x'.repeat(49) })
+    });
+    assert.equal(tooLong.status, 400);
+    assert.equal((await tooLong.json()).error.code, 'ALIAS_TOO_LONG');
+
+    const invalid = await fetch(BASE + '/api/projects/alpha-tool/alias', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ alias: 123 })
+    });
+    assert.equal(invalid.status, 400);
+    assert.equal((await invalid.json()).error.code, 'INVALID_BODY');
+
+    const missing = await fetch(BASE + '/api/projects/no-such-project/alias', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ alias: 'x' })
+    });
+    assert.equal(missing.status, 404);
+
+    // 清除别名：恢复原名、originalName 归 null
+    const clearRes = await fetch(BASE + '/api/projects/alpha-tool/alias', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ alias: '' })
+    });
+    assert.equal(clearRes.status, 200);
+    const clearBody = await clearRes.json();
+    assert.equal(clearBody.alias, null);
+    assert.equal(clearBody.project.name, '阿尔法工具');
+    assert.equal(clearBody.project.alias, null);
+    assert.equal(clearBody.project.originalName, null);
+
+    // 清理子项目别名，避免影响后续用例
+    await fetch(BASE + '/api/projects/parent-app--child-app/alias', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ alias: null })
+    });
+  });
+
   await t.test('运行时设置与监控 API（默认关闭）', async function () {
     const settingsRes = await fetch(BASE + '/api/settings');
     assert.equal(settingsRes.status, 200);

@@ -704,7 +704,9 @@
     {
       "id": "viewer-repro",
       "dir": "viewer-demo",
-      "name": "示例应用 11",
+      "name": "视图复现器",
+      "alias": "视图复现器",
+      "originalName": "示例应用 11",
       "path": "/Users/demo/workspace/viewer-demo",
       "updatedAt": "2026-10-29T03:21:27.928Z",
       "updatedSource": "files",

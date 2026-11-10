@@ -431,6 +431,12 @@
         typeof project.name === "string" && project.name
           ? project.name
           : project.dir || project.id || "未命名项目",
+      alias:
+        typeof project.alias === "string" && project.alias.trim() ? project.alias.trim() : null,
+      originalName:
+        typeof project.originalName === "string" && project.originalName
+          ? project.originalName
+          : null,
       path: typeof project.path === "string" ? project.path : "",
       updatedAt: project.updatedAt || null,
       createdAt: project.createdAt || null,
@@ -668,6 +674,7 @@
     if (!els.toasts) return;
     const el = document.createElement("div");
     el.className = "toast" + (opts.error ? " is-error" : "");
+    el.setAttribute("role", opts.error ? "alert" : "status");
     el.innerHTML =
       '<span class="toast-dot" aria-hidden="true"></span><span>' + esc(message) + "</span>";
     els.toasts.appendChild(el);
@@ -1097,12 +1104,22 @@
       list = list.filter((project) => {
         const haystack = [
           project.name,
+          project.alias,
+          project.originalName,
           project.dir,
           project.summary,
           project.readmeTitle,
           (project.tags || []).join(" "),
           (project.children || [])
-            .map((child) => [child.name, child.summary, (child.tags || []).join(" ")].join(" "))
+            .map((child) =>
+              [
+                child.name,
+                child.alias,
+                child.originalName,
+                child.summary,
+                (child.tags || []).join(" "),
+              ].join(" ")
+            )
             .join(" "),
         ]
           .join(" ")
@@ -3917,7 +3934,22 @@
       '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="m2 2 10 10M12 2 2 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>' +
       "</button>" +
       "</div>" +
-      '<h2 class="drawer-title" id="drawer-' + level + '-title" data-role="title">项目详情</h2>' +
+      '<h2 class="drawer-title" id="drawer-' +
+      level +
+      '-title" data-role="title" tabindex="0" aria-label="双击修改项目别称">项目详情</h2>' +
+      '<span class="visually-hidden" id="drawer-' +
+      level +
+      '-name" data-role="dialog-name" aria-hidden="true"></span>' +
+      '<div class="drawer-title-editor" data-role="title-editor" hidden>' +
+      '<input class="drawer-title-input" id="drawer-' +
+      level +
+      '-title-input" data-role="title-input" type="text" maxlength="48" autocomplete="off" spellcheck="false" aria-label="项目别称，回车保存，Esc 取消" />' +
+      '<span class="drawer-title-saving" data-role="title-saving" role="status" hidden>保存中…</span>' +
+      '<p class="drawer-title-error" id="drawer-' +
+      level +
+      '-title-error" data-role="title-error" role="alert" hidden></p>' +
+      "</div>" +
+      '<p class="drawer-original-name" data-role="original-name" hidden></p>' +
       '<p class="drawer-time"><span class="rel" data-role="rel"></span><span class="sep" data-role="sep" aria-hidden="true">·</span><span class="mono" data-role="abs"></span></p>' +
       '<div class="drawer-actions" data-role="actions"></div>' +
       "</header>" +
@@ -3952,6 +3984,12 @@
       back: q("back"),
       kind: q("kind"),
       title: q("title"),
+      dialogName: q("dialog-name"),
+      titleEditor: q("title-editor"),
+      titleInput: q("title-input"),
+      titleSaving: q("title-saving"),
+      titleError: q("title-error"),
+      originalName: q("original-name"),
       rel: q("rel"),
       sep: q("sep"),
       abs: q("abs"),
@@ -3972,6 +4010,7 @@
       log: q("log"),
       logStatus: q("log-status"),
       projectId: null,
+      editState: "idle",
     };
   }
 
@@ -4110,6 +4149,16 @@
       .join("");
   }
 
+  function renderDrawerTitle(panel, project) {
+    panel.title.textContent = project.name;
+    if (panel.dialogName) panel.dialogName.textContent = project.name;
+    const originalName = project.alias && project.originalName ? project.originalName : "";
+    panel.originalName.textContent = originalName ? "原名：" + originalName : "";
+    panel.originalName.hidden = !originalName;
+    if (originalName) panel.originalName.setAttribute("title", originalName);
+    else panel.originalName.removeAttribute("title");
+  }
+
   function renderDrawerPanel(panel, project) {
     if (!panel || !project) return;
     panel.projectId = project.id;
@@ -4117,7 +4166,7 @@
     panel.kind.textContent = project.parentId
       ? "子项目 · " + kindLabel(project.kind)
       : kindLabel(project.kind);
-    panel.title.textContent = project.name;
+    renderDrawerTitle(panel, project);
     const relativeTime = formatRelative(project.updatedAt);
     const absoluteTime = formatAbsolute(project.updatedAt);
     panel.rel.textContent = relativeTime;
@@ -4141,6 +4190,209 @@
     updateDrawerLog(panel, project.run && project.run.log ? project.run.log : []);
     renderChildren(panel, project);
     panel.back.hidden = panel.level !== 2;
+  }
+
+  /* ---------- 抽屉标题：修改别称 ---------- */
+
+  const ALIAS_MAX_LENGTH = 48;
+
+  function refreshProjectCard(project) {
+    if (project.parentId) {
+      replaceChildCard(project.parentId, project.id);
+      return;
+    }
+    if (state.query.trim() || state.sort === "name") renderList();
+    else replaceCard(project.id);
+  }
+
+  function applyAliasLocally(id, alias) {
+    const project = getProject(id);
+    if (!project) return null;
+    const nextAlias = typeof alias === "string" && alias.trim() ? alias.trim() : null;
+    if (nextAlias) {
+      if (!project.alias) project.originalName = project.name;
+      project.alias = nextAlias;
+      project.name = nextAlias;
+    } else {
+      project.name = project.originalName || project.name;
+      project.alias = null;
+      project.originalName = null;
+    }
+    refreshProjectCard(project);
+    return project;
+  }
+
+  function applyAliasUpdate(id, payload, fallbackAlias) {
+    const raw = payload && payload.project && payload.project.id === id ? payload.project : null;
+    if (raw) {
+      const project = normalizeProject(raw);
+      const topIndex = state.projects.findIndex((item) => item.id === id);
+      if (topIndex >= 0) {
+        state.projects[topIndex] = project;
+        refreshProjectCard(project);
+        return project;
+      }
+      if (project.parentId) {
+        const parent = getProject(project.parentId);
+        const childIndex =
+          parent && Array.isArray(parent.children)
+            ? parent.children.findIndex((item) => item.id === id)
+            : -1;
+        if (childIndex >= 0) {
+          parent.children[childIndex] = project;
+          refreshProjectCard(project);
+          return project;
+        }
+      }
+    }
+    return applyAliasLocally(id, fallbackAlias);
+  }
+
+  function resetTitleEditor(panel) {
+    panel.titleError.textContent = "";
+    panel.titleError.hidden = true;
+    panel.titleSaving.hidden = true;
+    panel.titleInput.disabled = false;
+    panel.titleInput.removeAttribute("aria-invalid");
+    panel.titleEditor.classList.remove("is-saving");
+  }
+
+  function setTitleEditing(panel, editing) {
+    panel.title.hidden = editing;
+    panel.titleEditor.hidden = !editing;
+    panel.root.classList.toggle("is-title-editing", editing);
+  }
+
+  function beginTitleEdit(panel) {
+    if (!panel || !panel.projectId || panel.editState === "saving") return;
+    const project = getProject(panel.projectId);
+    if (!project) return;
+    if (panel.editState === "editing") {
+      panel.titleInput.focus({ preventScroll: true });
+      panel.titleInput.select();
+      return;
+    }
+    panel.editState = "editing";
+    resetTitleEditor(panel);
+    panel.titleInput.value = project.name || "";
+    setTitleEditing(panel, true);
+    panel.titleInput.focus({ preventScroll: true });
+    panel.titleInput.select();
+  }
+
+  function endTitleEdit(panel) {
+    panel.editState = "idle";
+    resetTitleEditor(panel);
+    setTitleEditing(panel, false);
+  }
+
+  function cancelTitleEdit(panel) {
+    if (!panel || panel.editState !== "editing") return;
+    const project = getProject(panel.projectId);
+    if (project) renderDrawerTitle(panel, project);
+    endTitleEdit(panel);
+    panel.title.focus({ preventScroll: true });
+  }
+
+  function showTitleError(panel, message) {
+    panel.titleError.textContent = message;
+    panel.titleError.hidden = false;
+    panel.titleInput.setAttribute("aria-invalid", "true");
+    panel.titleInput.focus({ preventScroll: true });
+    panel.titleInput.select();
+  }
+
+  function setTitleSaving(panel, saving) {
+    panel.titleInput.disabled = saving;
+    panel.titleSaving.hidden = !saving;
+    panel.titleEditor.classList.toggle("is-saving", saving);
+    if (saving) panel.titleEditor.setAttribute("aria-busy", "true");
+    else panel.titleEditor.removeAttribute("aria-busy");
+  }
+
+  function focusTitleIfIdle(panel) {
+    const active = document.activeElement;
+    if (
+      !active ||
+      active === document.body ||
+      active === panel.titleInput ||
+      active === panel.title
+    ) {
+      panel.title.focus({ preventScroll: true });
+    }
+  }
+
+  function finishTitleSave(panel, message) {
+    const project = getProject(panel.projectId);
+    setTitleSaving(panel, false);
+    endTitleEdit(panel);
+    if (project) renderDrawerPanel(panel, project);
+    focusTitleIfIdle(panel);
+    if (message) toast(message);
+  }
+
+  function failTitleSave(panel, message) {
+    const project = getProject(panel.projectId);
+    if (project) renderDrawerTitle(panel, project);
+    endTitleEdit(panel);
+    focusTitleIfIdle(panel);
+    if (message) toast(message, { error: true });
+  }
+
+  async function commitTitleEdit(panel) {
+    if (!panel || panel.editState !== "editing") return;
+    const projectId = panel.projectId;
+    const project = getProject(projectId);
+    if (!project) {
+      endTitleEdit(panel);
+      return;
+    }
+    const trimmed = String(panel.titleInput.value || "").trim();
+    const previousAlias = project.alias || null;
+    let nextAlias = trimmed || null;
+    // 输入原名等价于清除别称，恢复扫描名称。
+    if (nextAlias && project.originalName && nextAlias === project.originalName) nextAlias = null;
+    if (nextAlias === previousAlias) {
+      cancelTitleEdit(panel);
+      return;
+    }
+    if (!previousAlias && nextAlias && nextAlias === project.name) {
+      cancelTitleEdit(panel);
+      return;
+    }
+    if (nextAlias && nextAlias.length > ALIAS_MAX_LENGTH) {
+      showTitleError(panel, "别称最多 " + ALIAS_MAX_LENGTH + " 个字符");
+      return;
+    }
+    panel.editState = "saving";
+    panel.titleError.hidden = true;
+    panel.titleError.textContent = "";
+    setTitleSaving(panel, true);
+    try {
+      if (MOCK) {
+        await new Promise((resolve) => window.setTimeout(resolve, 420));
+        applyAliasUpdate(projectId, null, nextAlias);
+        finishTitleSave(
+          panel,
+          nextAlias ? "演示模式 · 已保存别称「" + nextAlias + "」" : "演示模式 · 已恢复原名"
+        );
+        return;
+      }
+      const response = await fetch("/api/projects/" + encodeURIComponent(projectId) + "/alias", {
+        method: "POST",
+        headers: { accept: "application/json", "content-type": "application/json" },
+        body: JSON.stringify({ alias: nextAlias }),
+      });
+      const data = await safeJSON(response);
+      if (!response.ok) {
+        failTitleSave(panel, errorMessage(data, response.status));
+        return;
+      }
+      applyAliasUpdate(projectId, data, nextAlias);
+      finishTitleSave(panel, nextAlias ? "已保存别称「" + nextAlias + "」" : "已恢复原名");
+    } catch (error) {
+      failTitleSave(panel, "保存别称失败，请稍后重试");
+    }
   }
 
   function activeDrawerPanel() {
@@ -4908,6 +5160,31 @@
       });
       panel.back.addEventListener("click", () => closeSecondDrawer());
       panel.copy.addEventListener("click", () => copyProjectPath(panel));
+      panel.title.addEventListener("dblclick", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        beginTitleEdit(panel);
+      });
+      panel.title.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        event.stopPropagation();
+        beginTitleEdit(panel);
+      });
+      panel.titleInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          event.stopPropagation();
+          commitTitleEdit(panel);
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          cancelTitleEdit(panel);
+        }
+      });
+      panel.titleInput.addEventListener("blur", () => {
+        if (panel.editState === "editing") commitTitleEdit(panel);
+      });
       panel.root.addEventListener("keydown", trapFocusIn(panel));
       panel.actions.addEventListener("click", (event) => {
         const action = event.target.closest("[data-action]");

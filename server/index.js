@@ -17,6 +17,7 @@ import { createDiskUsage } from './disk-usage.js';
 import { createMonitor } from './monitor.js';
 import { createUpdater } from './updater.js';
 import { createExternalRuns } from './external-runs.js';
+import { createAliases, MAX_ALIAS_LENGTH } from './aliases.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -88,6 +89,11 @@ const preferences = createPreferences({
   dataDir: DATA_DIR,
   log: function (message) { console.log(message); }
 });
+const aliases = createAliases({
+  dataDir: DATA_DIR,
+  log: function (message) { console.log(message); }
+});
+aliases.load();
 const diskUsage = createDiskUsage({ log: function (message) { console.log(message); } });
 const monitor = createMonitor({ log: function (message) { console.log(message); } });
 const updater = createUpdater({
@@ -494,7 +500,11 @@ function serializeProject(project) {
       reason: '运行入口检测失败'
     };
   }
+  const alias = aliases.get(project.id);
   const payload = Object.assign({}, project, {
+    name: alias || project.name,
+    alias: alias,
+    originalName: alias ? project.name : null,
     runnable: Boolean(runInfo.runnable),
     runKind: runInfo.kind || 'none',
     runHint: runInfo.runHint || '',
@@ -1069,7 +1079,7 @@ async function handleApi(req, res, url) {
     return json(res, 200, found);
   }
 
-  const projectMatch = pathname.match(/^\/api\/projects\/([^/]+)(?:\/(run|stop|hidden|restart))?$/);
+  const projectMatch = pathname.match(/^\/api\/projects\/([^/]+)(?:\/(run|stop|hidden|restart|alias))?$/);
   if (projectMatch) {
     let id;
     try { id = decodeURIComponent(projectMatch[1]); } catch (err) { id = projectMatch[1]; }
@@ -1100,6 +1110,30 @@ async function handleApi(req, res, url) {
         project: serializeProject(project),
         hiddenCount: store.list().filter(function (item) { return preferences.isHidden(item.id); }).length
       });
+    }
+
+    if (action === 'alias' && method === 'POST') {
+      let body;
+      try {
+        body = await readJsonBody(req);
+      } catch (err) {
+        return apiError(res, 400, 'INVALID_JSON', '请求体必须是合法 JSON。');
+      }
+      if (!body || typeof body !== 'object' || !Object.prototype.hasOwnProperty.call(body, 'alias')) {
+        return apiError(res, 400, 'INVALID_BODY', '请求体需要 alias 字段（字符串或 null）。');
+      }
+      if (body.alias !== null && typeof body.alias !== 'string') {
+        return apiError(res, 400, 'INVALID_BODY', 'alias 必须是字符串或 null。');
+      }
+      const result = aliases.set(project.id, body.alias);
+      if (!result) {
+        return apiError(res, 400, 'ALIAS_TOO_LONG', '别称最多 ' + MAX_ALIAS_LENGTH + ' 个字符。');
+      }
+      aliases.save();
+      if (result.changed) {
+        broadcast('projects', { projects: store.list().map(serializeProject) });
+      }
+      return json(res, 200, { project: serializeProject(project), alias: result.alias });
     }
 
     if (action === 'restart' && method === 'POST') {

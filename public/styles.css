@@ -1370,6 +1370,86 @@ svg {
   color: var(--text);
   text-wrap: pretty;
   overflow-wrap: anywhere;
+  border-radius: 4px;
+  cursor: text;
+}
+
+.drawer-title:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.drawer-title-editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.drawer-title-input {
+  flex: 1 1 240px;
+  min-width: 0;
+  height: 40px;
+  padding: 5px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--bg);
+  font-family: inherit;
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--text);
+  transition: border-color 300ms var(--ease), opacity 300ms var(--ease);
+}
+
+.drawer-title-input::placeholder {
+  color: var(--muted);
+  opacity: 0.75;
+}
+
+.drawer-title-input:hover:not([disabled]) {
+  border-color: var(--muted);
+}
+
+.drawer-title-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.drawer-title-input[disabled] {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.drawer-title-input[aria-invalid="true"] {
+  border-color: var(--a-rose);
+}
+
+.drawer-title-saving {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+}
+
+.drawer-title-error {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--a-rose);
+}
+
+.drawer-original-name {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .drawer-time {
