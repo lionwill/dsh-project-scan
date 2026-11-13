@@ -380,3 +380,23 @@ test('llm：选择的渠道不可用时不静默回退默认渠道', async funct
   assert.equal(calls, 0);
   assert.equal(result.patches.size, 0);
 });
+
+test('llm：设置里关闭 AI 摘要（getEnabled=false）时即使 DSH 可用也不生成', async function () {
+  const dataDir = tmpDir();
+  let calls = 0;
+  const llm = createLLM({
+    dataDir: dataDir,
+    dshLlm: {
+      resolve: function () {
+        return { provider: 'opencode-go', model: 'm', api: 'openai-completions', baseUrl: 'https://x.test/v1', apiKey: 'k', opencode: false };
+      }
+    },
+    getEnabled: function () { return false; },
+    fetchImpl: async function () { calls += 1; throw new Error('不应请求'); }
+  });
+  assert.equal(llm.available, false);
+  assert.equal(llm.status().enabled, false);
+  const result = await llm.enrich([makeProject(tmpDir(), { readme: '# x\n\n关闭 AI 摘要验证。\n' })]);
+  assert.equal(calls, 0);
+  assert.equal(result.patches.size, 0);
+});

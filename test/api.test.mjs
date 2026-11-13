@@ -313,6 +313,27 @@ test('项目雷达 HTTP API 端到端', async function (t) {
     assert.equal(settings.monitorEnabled, false);
     assert.equal(settings.intervalMs, 1000);
     assert.equal(settings.autoUpdate, true, '自动更新默认开启');
+    assert.equal(settings.llmEnabled, true, 'AI 摘要默认开启');
+
+    const llmOff = await fetch(BASE + '/api/settings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ llmEnabled: false })
+    });
+    assert.equal(llmOff.status, 200);
+    const llmOffBody = await llmOff.json();
+    assert.equal(llmOffBody.settings.llmEnabled, false);
+    assert.equal(llmOffBody.llm.enabled, false, '关闭后 LLM 状态为不可用');
+    const llmOffGet = await (await fetch(BASE + '/api/settings')).json();
+    assert.equal(llmOffGet.llmEnabled, false);
+    // 重新开启，避免影响后续用例
+    const llmOn = await fetch(BASE + '/api/settings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ llmEnabled: true })
+    });
+    assert.equal(llmOn.status, 200);
+    assert.equal((await llmOn.json()).settings.llmEnabled, true);
 
     const autoOff = await fetch(BASE + '/api/settings', {
       method: 'POST',
@@ -933,7 +954,7 @@ test('AI 摘要渠道选择 API（DSH 渠道 + 模型下拉）', async function 
     assert.deepEqual(settings.llmSelection, { provider: 'opencode-go', model: 'glm-5.3' });
 
     const savedSettings = JSON.parse(fs.readFileSync(path.join(workspace, '.data', 'settings.json'), 'utf8'));
-    assert.equal(savedSettings.version, 3);
+    assert.equal(savedSettings.version, 4);
     assert.deepEqual(savedSettings.llmSelection, { provider: 'opencode-go', model: 'glm-5.3' });
     assert.ok(!JSON.stringify(savedSettings).includes('test-key-'), 'settings.json 不保存 token');
 

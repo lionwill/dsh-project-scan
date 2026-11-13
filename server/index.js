@@ -73,12 +73,6 @@ try {
 
 const store = createStore({ dataDir: DATA_DIR, root: WORKSPACE_ROOT });
 const dshLlm = createDshLlm({ log: function (message) { console.log(message); } });
-const llm = createLLM({
-  dataDir: DATA_DIR,
-  log: function (message) { console.log(message); },
-  dshLlm: dshLlm,
-  getSelection: function () { return preferences.getSettings().llmSelection; }
-});
 const workspaces = createWorkspaces({
   dataDir: DATA_DIR,
   defaultRoot: WORKSPACE_ROOT,
@@ -94,6 +88,13 @@ const aliases = createAliases({
   log: function (message) { console.log(message); }
 });
 aliases.load();
+const llm = createLLM({
+  dataDir: DATA_DIR,
+  log: function (message) { console.log(message); },
+  dshLlm: dshLlm,
+  getSelection: function () { return preferences.getSettings().llmSelection; },
+  getEnabled: function () { return preferences.getSettings().llmEnabled !== false; }
+});
 const diskUsage = createDiskUsage({ log: function (message) { console.log(message); } });
 const monitor = createMonitor({ log: function (message) { console.log(message); } });
 const updater = createUpdater({
@@ -898,18 +899,33 @@ async function handleApi(req, res, url) {
     }
     const hasMonitor = typeof body.monitorEnabled === 'boolean';
     const hasAutoUpdate = typeof body.autoUpdate === 'boolean';
-    if (!hasMonitor && !hasAutoUpdate) {
-      return apiError(res, 400, 'INVALID_BODY', 'monitorEnabled / autoUpdate 必须是 true 或 false。');
+    const hasLlmEnabled = typeof body.llmEnabled === 'boolean';
+    if (!hasMonitor && !hasAutoUpdate && !hasLlmEnabled) {
+      return apiError(res, 400, 'INVALID_BODY', 'monitorEnabled / autoUpdate / llmEnabled 必须是 true 或 false。');
     }
     const patch = {};
     if (hasMonitor) patch.monitorEnabled = body.monitorEnabled;
     if (hasAutoUpdate) patch.autoUpdate = body.autoUpdate;
+    if (hasLlmEnabled) patch.llmEnabled = body.llmEnabled;
     preferences.updateSettings(patch);
     preferences.saveSettings();
     if (hasMonitor) applyMonitorSetting(body.monitorEnabled);
+    if (hasLlmEnabled) {
+      llm.refreshConfig();
+      if (body.llmEnabled === false) {
+        // 关闭 AI 摘要：取消待执行的 enrich；已有 AI 摘要保留，没有 AI 摘要的项目继续用 README/文档启发式
+        if (enrichTimer) {
+          clearTimeout(enrichTimer);
+          enrichTimer = null;
+        }
+      } else {
+        scheduleEnrichment(300);
+      }
+    }
     return json(res, 200, {
       settings: Object.assign({}, preferences.getSettings(), { intervalMs: 1000 }),
-      monitor: monitor.snapshot()
+      monitor: monitor.snapshot(),
+      llm: llm.status()
     });
   }
 
@@ -1305,6 +1321,8 @@ async function start() {
         console.log('[project-scan] LLM 摘要：' + llmInfo.model + '（可用）');
       }
       scheduleEnrichment(800);
+    } else if (preferences.getSettings().llmEnabled === false) {
+      console.log('[project-scan] AI 摘要：已在设置中关闭，使用 README/文档启发式摘要');
     } else {
       const llmInfo = llm.status();
       console.log('[project-scan] LLM 摘要：' + (llmInfo.error ? '渠道不可用（' + llmInfo.error + '）' : '未配置 API key') + '，使用文档启发式摘要');

@@ -16,6 +16,7 @@
 - **文档发现**：说明不一定在 README。没有 README 时自动查找项目根的其他文档（CHANNELS.md、INSTRUCTIONS.md、审查报告.md 等）与 docs 目录。
 - **AI 摘要**：扫描完成后用 LLM 复核用途概要、技术标签与项目短名，写入缓存，只有内容变化才重新请求；LLM 不可用时自动退回文档启发式摘要。
 - **在设置里选渠道和模型**：AI 摘要默认复用本机 DSH 的默认 LLM；也可以在「设置 → AI 摘要」里先选渠道、再选模型（数据来自 DSH 配置），不单独保存 key（使用 DSH 环境变量/凭据）。
+- **AI 摘要开关**：「设置 → AI 摘要」顶部可一键关闭 AI 摘要。关闭后不再生成新的 AI 摘要；**已经生成过的 AI 摘要保留**，没有 AI 摘要的项目使用 README / 文档说明；重新开启后会补生成缺失的摘要。
 - **自动更新（默认开启）**：服务启动时后台静默检查 git 远端，有新版本且可 fast-forward 时自动拉取；后端变更会提示「需重启后生效」，前端变更提示刷新页面，纯样式更新只 toast 一次；可在「设置 → 更新」里关闭或手动检查。
 - **README 归一化**：若项目没有任何 README，而 LLM 判定某份文档实质上是它的说明，就把该文档复制为 README.md（不覆盖已有文件，可用 PROJECT_SCAN_README_COPY=off 关闭），并把一级标题改写为项目短名。
 - **hover 一键运行**：自动识别 npm / pnpm / yarn 脚本、start.sh、静态页面、Godot、Python、Xcode 项目；捕获 localhost 端口后直接在新标签页打开。
@@ -183,6 +184,7 @@ node scripts/enrich.mjs --scan --report
 | POST | /api/scan | 手动触发扫描 |
 | GET | /api/status | 扫描、调度与 AI 摘要状态 |
 | POST | /api/projects/:id/alias | 修改/清除项目别称（`{ alias: string | null }`，空值恢复原名；只影响显示） |
+| POST | /api/settings | 运行时设置：`{ monitorEnabled?, autoUpdate?, llmEnabled? }`（AI 摘要开关关闭后保留已有摘要） |
 | GET | /api/llm/channels | 列出本机 DSH 的 AI 摘要渠道与模型（key 只返回掩码）及当前选择 |
 | POST | /api/llm/selection | 保存 AI 摘要渠道选择（`{ selection: { provider, model } | null }`，null 为跟随 DSH 默认） |
 | GET | /api/update/status | 自动更新状态（最近一次检查结果、是否需要重启/刷新） |
@@ -247,7 +249,7 @@ cd dsh-project-scan
 node --test
 ```
 
-共 179 项测试，覆盖扫描与子项目规则、文档发现、多工作区增删与持久化、目录浏览、隐藏项目持久化与接口、磁盘占用计算、运行监控采样与降级、运行中列表/重启/全部停止、调度边界、运行进程与端口捕获、LLM 摘要与 README 归一化、DSH 渠道/模型读取与设置选择、外部启动实例检测（lsof 解析与路径匹配）、项目别称持久化与接口、HTTP API 端到端。测试会自己在临时目录里搭一个工作区、起一个独立端口的服务，不会碰真实项目，也不依赖网络。
+共 181 项测试，覆盖扫描与子项目规则、文档发现、多工作区增删与持久化、目录浏览、隐藏项目持久化与接口、磁盘占用计算、运行监控采样与降级、运行中列表/重启/全部停止、调度边界、运行进程与端口捕获、LLM 摘要与 README 归一化、DSH 渠道/模型读取与设置选择、AI 摘要开关与摘要保留语义、外部启动实例检测（lsof 解析与路径匹配）、项目别称持久化与接口、HTTP API 端到端。测试会自己在临时目录里搭一个工作区、起一个独立端口的服务，不会碰真实项目，也不依赖网络。
 
 ## 安全边界
 

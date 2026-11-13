@@ -179,6 +179,9 @@
     llmLoadFailed: false,
     llmError: "",
     llmSaving: false,
+    llmEnabled: true,
+    llmEnabledSaving: false,
+    llmEnabledError: "",
     settingsTab: "monitor",
     autoUpdate: true,
     updateStatus: null,
@@ -2667,9 +2670,72 @@
     );
   }
 
+  function renderLlmEnabledSetting() {
+    if (!els.llmEnabledToggle) return;
+    els.llmEnabledToggle.setAttribute("aria-checked", state.llmEnabled !== false ? "true" : "false");
+    els.llmEnabledToggle.disabled = state.llmEnabledSaving;
+    els.llmEnabledToggle.setAttribute("aria-busy", state.llmEnabledSaving ? "true" : "false");
+    if (els.llmEnabledError) {
+      els.llmEnabledError.hidden = !state.llmEnabledError;
+      els.llmEnabledError.textContent = state.llmEnabledError || "";
+    }
+  }
+
+  async function toggleLlmEnabled() {
+    if (state.llmEnabledSaving) return;
+    const previous = state.llmEnabled !== false;
+    const next = !previous;
+    state.llmEnabledSaving = true;
+    state.llmEnabled = next;
+    state.llmEnabledError = "";
+    renderLlmEnabledSetting();
+    renderLlmSection();
+    try {
+      if (MOCK) {
+        await new Promise((resolve) => window.setTimeout(resolve, 260));
+        state.llmEnabledSaving = false;
+        state.mockSettings = Object.assign({}, state.mockSettings || {}, { llmEnabled: next });
+        renderLlmEnabledSetting();
+        renderLlmSection();
+        toast("演示模式 · 不会写入后端（" + (next ? "已开启" : "已关闭") + "AI 摘要）");
+        return;
+      }
+      const response = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({ llmEnabled: next }),
+      });
+      const data = await safeJSON(response);
+      if (!response.ok) throw new Error(errorMessage(data, response.status));
+      state.llmEnabledSaving = false;
+      if (data && data.settings && typeof data.settings.llmEnabled === "boolean") {
+        state.llmEnabled = data.settings.llmEnabled;
+      }
+      if (data && data.llm && state.meta) {
+        state.meta.llm = Object.assign({}, state.meta.llm || {}, data.llm);
+        renderHeroMeta();
+      }
+      renderLlmEnabledSetting();
+      renderLlmSection();
+      toast(
+        state.llmEnabled
+          ? "已开启 AI 摘要，正在生成摘要…"
+          : "已关闭 AI 摘要，已有摘要保留，其余使用 README 说明"
+      );
+    } catch (error) {
+      state.llmEnabledSaving = false;
+      state.llmEnabled = previous;
+      state.llmEnabledError = "AI 摘要开关没有保存：" + ((error && error.message) || "请稍后重试");
+      renderLlmEnabledSetting();
+      renderLlmSection();
+      toast("AI 摘要开关保存失败，已回滚", { error: true });
+    }
+  }
+
   function renderLlmSection() {
     if (!els.llmChannel || !els.llmModel) return;
     const busy = state.llmLoading || state.llmSaving;
+    const llmOff = state.llmEnabled === false;
     const locked = busy || state.llmLoadFailed;
     const selectedChannel =
       state.llmSelection && state.llmSelection.provider
@@ -2695,7 +2761,7 @@
         })
         .join("");
     els.llmChannel.value = channelValue;
-    els.llmChannel.disabled = locked || !state.llmChannels.length;
+    els.llmChannel.disabled = locked || !state.llmChannels.length || llmOff;
     els.llmChannel.setAttribute("aria-busy", busy ? "true" : "false");
 
     const activeChannel = channelValue ? llmChannelById(channelValue) : null;
@@ -2714,7 +2780,7 @@
         )
         .join("");
       els.llmModel.value = desiredModel;
-      els.llmModel.disabled = locked;
+      els.llmModel.disabled = locked || llmOff;
     } else {
       const effectiveModel =
         state.llmEffective && state.llmEffective.model ? state.llmEffective.model : "";
@@ -2725,7 +2791,9 @@
     }
     els.llmModel.setAttribute("aria-busy", busy ? "true" : "false");
 
-    els.llmStatus.textContent = llmStatusText();
+    els.llmStatus.textContent = llmOff
+      ? "AI 摘要已关闭 · 没有 AI 摘要的项目使用 README / 文档说明"
+      : llmStatusText();
     if (els.llmError) {
       els.llmError.hidden = !state.llmError;
       els.llmError.textContent = state.llmError || "";
@@ -2896,8 +2964,11 @@
       const mock = state.mockSettings || {};
       state.monitorEnabled = mock.monitorEnabled === true;
       if (typeof mock.autoUpdate === "boolean") state.autoUpdate = mock.autoUpdate;
+      if (typeof mock.llmEnabled === "boolean") state.llmEnabled = mock.llmEnabled;
       renderMonitorSetting();
       renderUpdateSetting();
+      renderLlmEnabledSetting();
+      if (els.llmChannel) renderLlmSection();
       applyMonitorAvailability();
       return;
     }
@@ -2908,6 +2979,7 @@
         if (data && typeof data === "object") {
           state.monitorEnabled = data.monitorEnabled === true;
           if (typeof data.autoUpdate === "boolean") state.autoUpdate = data.autoUpdate;
+          if (typeof data.llmEnabled === "boolean") state.llmEnabled = data.llmEnabled;
           if (Number.isFinite(data.intervalMs)) state.monitorIntervalMs = data.intervalMs;
         }
       }
@@ -2916,6 +2988,8 @@
     }
     renderMonitorSetting();
     renderUpdateSetting();
+    renderLlmEnabledSetting();
+    if (els.llmChannel) renderLlmSection();
     applyMonitorAvailability();
   }
 
@@ -5057,6 +5131,7 @@
     els.updateToggle.addEventListener("click", toggleAutoUpdate);
     els.updateCheck.addEventListener("click", checkForUpdates);
     els.updateRefresh.addEventListener("click", () => window.location.reload());
+    if (els.llmEnabledToggle) els.llmEnabledToggle.addEventListener("click", toggleLlmEnabled);
     els.llmChannel.addEventListener("change", handleLlmChannelChange);
     els.llmModel.addEventListener("change", handleLlmModelChange);
     els.llmRetry.addEventListener("click", () => loadLlmChannels());
@@ -5355,6 +5430,8 @@
     els.llmStatus = document.getElementById("llm-status");
     els.llmError = document.getElementById("llm-error");
     els.llmRetry = document.getElementById("llm-retry");
+    els.llmEnabledToggle = document.getElementById("llm-enabled-toggle");
+    els.llmEnabledError = document.getElementById("llm-enabled-error");
     els.settingsTabs = document.getElementById("settings-tabs");
     els.settingsTabButtons = Array.prototype.slice.call(
       document.querySelectorAll("#settings-tabs [role='tab']")

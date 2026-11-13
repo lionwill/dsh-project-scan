@@ -347,7 +347,17 @@
         <p class="ws-error" id="monitor-error" role="alert" hidden></p>
       </section>
       <section class="ws-section settings-panel" id="settings-panel-llm" role="tabpanel" aria-labelledby="settings-tab-llm" tabindex="0" hidden>
-        <h3 class="drawer-label">AI 摘要渠道</h3>
+        <h3 class="drawer-label">AI 摘要</h3>
+        <div class="settings-switch-row">
+          <div class="settings-switch-copy">
+            <p class="settings-switch-title">启用 AI 摘要</p>
+            <p class="ws-hint">关闭后不再生成新的 AI 摘要；已经生成过的 AI 摘要会保留，没有 AI 摘要的项目使用 README / 文档说明。</p>
+          </div>
+          <button class="switch" id="llm-enabled-toggle" type="button" role="switch" aria-checked="true" aria-label="AI 摘要开关">
+            <span class="switch-knob" aria-hidden="true"></span>
+          </button>
+        </div>
+        <p class="ws-error" id="llm-enabled-error" role="alert" hidden></p>
         <div class="settings-field">
           <label class="settings-field-label" for="llm-channel">渠道</label>
           <select class="settings-select" id="llm-channel" aria-describedby="llm-hint">

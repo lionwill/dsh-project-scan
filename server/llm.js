@@ -71,7 +71,9 @@ function resolveConfig(options) {
   const opts = options || {};
   const env = process.env;
   const enabledEnv = String(env.PROJECT_SCAN_LLM || 'on').toLowerCase();
-  const disabled = enabledEnv === 'off' || enabledEnv === '0' || enabledEnv === 'false';
+  const envDisabled = enabledEnv === 'off' || enabledEnv === '0' || enabledEnv === 'false';
+  const userEnabled = typeof opts.getEnabled === 'function' ? opts.getEnabled() !== false : true;
+  const disabled = envDisabled || !userEnabled;
 
   let selection = null;
   if (!disabled && typeof opts.getSelection === 'function') {

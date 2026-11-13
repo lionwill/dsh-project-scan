@@ -93,15 +93,15 @@ test('preferences：运行时设置默认关闭、可持久化、非法字段被
   const dataDir = tmpDir();
   const prefs = createPreferences({ dataDir: dataDir });
   prefs.load();
-  assert.deepEqual(prefs.getSettings(), { monitorEnabled: false, llmSelection: null, autoUpdate: true });
+  assert.deepEqual(prefs.getSettings(), { monitorEnabled: false, llmSelection: null, autoUpdate: true, llmEnabled: true });
 
   prefs.updateSettings({ monitorEnabled: true, unknownKey: 'x' });
-  assert.deepEqual(prefs.getSettings(), { monitorEnabled: true, llmSelection: null, autoUpdate: true });
+  assert.deepEqual(prefs.getSettings(), { monitorEnabled: true, llmSelection: null, autoUpdate: true, llmEnabled: true });
   prefs.saveSettings();
 
   const reloaded = createPreferences({ dataDir: dataDir });
   reloaded.load();
-  assert.deepEqual(reloaded.getSettings(), { monitorEnabled: true, llmSelection: null, autoUpdate: true });
+  assert.deepEqual(reloaded.getSettings(), { monitorEnabled: true, llmSelection: null, autoUpdate: true, llmEnabled: true });
 
   reloaded.updateSettings({ monitorEnabled: 'yes' });
   assert.equal(reloaded.getSettings().monitorEnabled, true, '非 boolean 值应被忽略');
@@ -109,7 +109,7 @@ test('preferences：运行时设置默认关闭、可持久化、非法字段被
   fs.writeFileSync(path.join(dataDir, 'settings.json'), '{ broken');
   const broken = createPreferences({ dataDir: dataDir });
   broken.load();
-  assert.deepEqual(broken.getSettings(), { monitorEnabled: false, llmSelection: null, autoUpdate: true }, '损坏设置降级为默认值');
+  assert.deepEqual(broken.getSettings(), { monitorEnabled: false, llmSelection: null, autoUpdate: true, llmEnabled: true }, '损坏设置降级为默认值');
 
   broken.updateSettings({ monitorEnabled: false });
   broken.save();
@@ -127,7 +127,7 @@ test('preferences：AI 摘要渠道选择（只存 provider/model，不存 token
   assert.deepEqual(prefs.getSettings().llmSelection, { provider: 'opencode-go', model: 'deepseek-v4.1-flash' });
   prefs.saveSettings();
   const saved = JSON.parse(fs.readFileSync(path.join(dataDir, 'settings.json'), 'utf8'));
-  assert.equal(saved.version, 3);
+  assert.equal(saved.version, 4);
   assert.deepEqual(saved.llmSelection, { provider: 'opencode-go', model: 'deepseek-v4.1-flash' });
   assert.ok(!JSON.stringify(saved).toLowerCase().includes('key'), 'settings.json 不保存 token');
 
@@ -157,7 +157,7 @@ test('preferences：自动更新开关（默认开启、可关闭、持久化）
   prefs.updateSettings({ autoUpdate: false });
   prefs.saveSettings();
   const saved = JSON.parse(fs.readFileSync(path.join(dataDir, 'settings.json'), 'utf8'));
-  assert.equal(saved.version, 3);
+  assert.equal(saved.version, 4);
   assert.equal(saved.autoUpdate, false);
 
   const reloaded = createPreferences({ dataDir: dataDir });
@@ -165,4 +165,23 @@ test('preferences：自动更新开关（默认开启、可关闭、持久化）
   assert.equal(reloaded.getSettings().autoUpdate, false);
   reloaded.updateSettings({ autoUpdate: 'yes' });
   assert.equal(reloaded.getSettings().autoUpdate, false, '非 boolean 值应被忽略');
+});
+
+test('preferences：AI 摘要开关（默认开启、可关闭、持久化）', function () {
+  const dataDir = tmpDir();
+  const prefs = createPreferences({ dataDir: dataDir });
+  prefs.load();
+  assert.equal(prefs.getSettings().llmEnabled, true);
+
+  prefs.updateSettings({ llmEnabled: false });
+  prefs.saveSettings();
+  const saved = JSON.parse(fs.readFileSync(path.join(dataDir, 'settings.json'), 'utf8'));
+  assert.equal(saved.version, 4);
+  assert.equal(saved.llmEnabled, false);
+
+  const reloaded = createPreferences({ dataDir: dataDir });
+  reloaded.load();
+  assert.equal(reloaded.getSettings().llmEnabled, false);
+  reloaded.updateSettings({ llmEnabled: 'no' });
+  assert.equal(reloaded.getSettings().llmEnabled, false, '非 boolean 值应被忽略');
 });

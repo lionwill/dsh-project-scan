@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const DEFAULT_SETTINGS = { monitorEnabled: false, llmSelection: null, autoUpdate: true };
+const DEFAULT_SETTINGS = { monitorEnabled: false, llmSelection: null, autoUpdate: true, llmEnabled: true };
 
 /** AI 摘要渠道选择只接受 { provider, model } 两个非空字符串；其他形状一律忽略。 */
 function normalizeLlmSelection(value) {
@@ -23,11 +23,12 @@ function cloneSelection(selection) {
  * 1) 隐藏项目：在「设置」里勾选隐藏的顶层项目，持久化在 <dataDir>/hidden.json：
  *      { "version": 1, "hiddenIds": ["project-a", ...] }
  * 2) 运行时监控开关 + AI 摘要渠道选择：持久化在 <dataDir>/settings.json：
- *      { "version": 3, "monitorEnabled": false,
+ *      { "version": 4, "monitorEnabled": false,
  *        "llmSelection": { "provider": "opencode-go", "model": "deepseek-v4.1-flash" } | null,
- *        "autoUpdate": true }
+ *        "autoUpdate": true, "llmEnabled": true }
  *      null 表示跟随 DSH 默认模型；只保存 provider/model，不保存任何 token。
- *      version 1 / 2 的旧设置文件仍可读取。
+ *      llmEnabled=false 时关闭 AI 摘要，卡片使用 README/文档启发式摘要。
+ *      version 1 / 2 / 3 的旧设置文件仍可读取。
  */
 export function createPreferences(options) {
   const opts = options || {};
@@ -94,6 +95,9 @@ export function createPreferences(options) {
       if (parsed && typeof parsed.autoUpdate === 'boolean') {
         settings.autoUpdate = parsed.autoUpdate;
       }
+      if (parsed && typeof parsed.llmEnabled === 'boolean') {
+        settings.llmEnabled = parsed.llmEnabled;
+      }
     } catch (err) {
       if (err && err.code !== 'ENOENT') {
         log('[preferences] 读取运行时设置失败，使用默认值：' + String((err && err.message) || err));
@@ -115,10 +119,11 @@ export function createPreferences(options) {
 
   function saveSettings() {
     atomicWrite(settingsFile, {
-      version: 3,
+      version: 4,
       monitorEnabled: Boolean(settings.monitorEnabled),
       llmSelection: cloneSelection(settings.llmSelection),
-      autoUpdate: Boolean(settings.autoUpdate)
+      autoUpdate: Boolean(settings.autoUpdate),
+      llmEnabled: Boolean(settings.llmEnabled)
     });
     return getSettings();
   }
@@ -169,6 +174,9 @@ export function createPreferences(options) {
     }
     if (typeof patch.autoUpdate === 'boolean') {
       settings.autoUpdate = patch.autoUpdate;
+    }
+    if (typeof patch.llmEnabled === 'boolean') {
+      settings.llmEnabled = patch.llmEnabled;
     }
     if (Object.prototype.hasOwnProperty.call(patch, 'llmSelection')) {
       if (patch.llmSelection === null) {
